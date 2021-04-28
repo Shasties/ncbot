@@ -168,17 +168,23 @@ async def on_message(message):
                     await message.channel.send("Both players drew the same kind of frame.")
                     json_data[starter]['Ties'] = json_data[starter]['Ties']+1
                     json_data[my_id]['Ties'] = json_data[my_id]['Ties']+1
+                    json_data[my_id]['DougCoin'] = json_data[my_id]['DougCoin']+7
+                    json_data[starter]['DougCoin'] = json_data[starter]['DougCoin']+7
                 elif result == "starter":
                     await message.channel.send("%s wins %s: " % (json_data[starter]['name'],random_challenger_card.split('/')[-1].split('.png')[0]), file = discord.File(random_challenger_card))
                     json_data[starter]['Owns'].append(random_challenger_card)
                     json_data[starter]['Wins'] = json_data[starter]['Wins']+1
+                    json_data[starter]['DougCoin'] = json_data[starter]['DougCoin']+10
                     json_data[my_id]['Losses'] = json_data[my_id]['Losses']+1
+                    json_data[my_id]['DougCoin'] = json_data[my_id]['DougCoin']+5
                     json_data[my_id]['Owns'].remove(random_challenger_card)
                 else:
                     await message.channel.send("%s wins %s:" % (json_data[my_id]['name'],random_starter_card.split('/')[-1].split('.png')[0]),file = discord.File(random_starter_card))
                     json_data[my_id]['Owns'].append(random_starter_card)
                     json_data[my_id]['Wins'] = json_data[my_id]['Wins']+1
+                    json_data[my_id]['DougCoin'] = json_data[my_id]['DougCoin']+10
                     json_data[starter]['Losses'] = json_data[starter]['Losses']+1
+                    json_data[starter]['DougCoin'] = json_data[starter]['DougCoin']+5
                     json_data[starter]['Owns'].remove(random_starter_card)
                 json_data['isduel'] = "false"
                 json_data['starter'] = ""
