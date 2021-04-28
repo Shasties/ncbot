@@ -13,12 +13,14 @@ stat_tracker_file = "/opt/ncbot/stats.json"
 ranks = ['Nostalgia Casual','Nostalgia Fan','Nostalgia Nut','Nostalgia Cultist','Nostalgia Freak','Fennah','The Dictator']
 keywords_file = "/opt/ncbot/keywords.json"
 keywords = []
+types = ['Rock','Paper','Critic']
 with open(keywords_file) as f:
     keywords = json.load(f)
 quotes_file = "/opt/ncbot/quotes.json"
 quotes = []
 with open(quotes_file) as f:
     quotes = json.load(f)
+
 @client.event
 async def on_ready():
     print(f'{client.user} has connected to Discord!')
@@ -35,23 +37,40 @@ def getQuote():
 def getImage():
     image_dir = "/opt/ncbot/Images/"
     files = os.listdir(image_dir)
-    random_index = random.randrange(0,len(files))
-    f = image_dir+files[random_index]
+    good_to_go = False
     json_data = {}
+    random_index = 0
+    f = ""
+    # generate an unowned frame
+    while not good_to_go:
+        random_index = random.randrange(0,len(files))
+        f = image_dir+files[random_index]
+        with open(stat_tracker_file) as g:
+            json_data = json.load(g)
+            good_to_go = True
+            for user in json_data.keys():
+                if type(json_data[user]) == dict and f in json_data[user]['Owns']:
+                    good_to_go = False
+
     with open(image_tracker_file) as g:
         json_data = json.load(g)
         if f not in json_data.keys():
-            json_data[f] = 1
-        else:
-            json_data[f] = json_data[f] + 1
+            random_index = random.randrange(0,len(types))
+            random_type = types[random_index]
+            json_data[f] = random_type
     with open(image_tracker_file,'w') as g:
         json.dump(json_data,g)
     unseen_images = len(files) - len(json_data.keys())
-    return discord.File(f),json_data[f],unseen_images
+    return discord.File(f),unseen_images,f
 
-def createMotivational():
+def createMotivational(user_id):
     image_dir = "/opt/ncbot/Images/"
     files = os.listdir(image_dir)
+    json_data = {}
+    with open(stat_tracker_file) as f:
+        json_data = json.load(f)
+    #random_index = random.randrange(0,len(json_data[user_id]['Owns']))
+    #f = json_data[user_id]['Owns'][random_index]
     random_index = random.randrange(0,len(files))
     f = image_dir+files[random_index]
     my_image = Image.open(f)
@@ -61,9 +80,36 @@ def createMotivational():
     image_editable = ImageDraw.Draw(my_image)
     colors = [(245,78,66),(255,0,0),(0,255,0),(0,0,255),(255,255,255)]
     color = colors[random.randrange(0,len(colors))]
+    image_editable.text((13, 13), random_quote, font=my_font, fill=(0,0,0))
+    image_editable.text((17, 13), random_quote, font=my_font, fill=(0,0,0))
+    image_editable.text((13, 17), random_quote, font=my_font, fill=(0,0,0))
+    image_editable.text((17, 17), random_quote, font=my_font, fill=(0,0,0))
     image_editable.text((15,15), random_quote, color, font=my_font)
     my_image.save("/opt/ncbot/output/motivation.jpg")
     return discord.File("/opt/ncbot/output/motivation.jpg")
+
+# Rock < Paper
+# Paper < Critic
+# Critic < Rock
+def resolveCombat(challenger, starter, cards):
+    if cards[challenger] == cards[starter]:
+        return "tie"
+    else:
+        if cards[challenger] == 'Paper':
+            if cards[starter] == 'Rock':
+                return "challenger"
+            else: 
+                return "starter"
+        elif cards[challenger] == 'Rock':
+            if cards[starter] == 'Paper':
+                return "starter"
+            else:
+                return "challenger"
+        else:
+            if cards[starter] == 'Rock':
+                return "starter"
+            else:
+                return "challenger"
 
 @client.event
 async def on_message(message):
@@ -77,44 +123,97 @@ async def on_message(message):
     if message.author == client.user:
         return
     if my_id not in json_data.keys():
-        json_data[my_id] = {'Points': 0}
-    if message.content == "!level":
-        msg = "You currently have: %d xp. You are a %s" % (json_data[my_id]['Points'],json_data[my_id]['Level'])
+        json_data[my_id] = {'Points': 0,'DougCoin': 100,'Owns':[],'Wins':0,'Level': ranks[0]}
+    if message.content == "!stats":
+        msg = "You currently have: %d xp and %d DougCoin. You are a %s" % (json_data[my_id]['Points'],json_data[my_id]['DougCoin'],json_data[my_id]['Level'])
         await message.channel.send(msg)
     for word in message.content.split(' '):
         if word in keywords:
             json_data[my_id]['Points'] = json_data[my_id]['Points'] + 10
+            json_data[my_id]['DougCoin'] = json_data[my_id]['DougCoin'] + 10
+
+    # Dueling
+    if message.content.split(' ')[0] == "!duel":
+        if len(json_data[my_id]['Owns']) > 0:
+            if json_data['isduel'] == "true" and json_data['starter'] != my_id:
+                starter = json_data['starter']
+                random_starter_card_index = random.randrange(len(json_data[starter]['Owns'])) 
+                random_starter_card = json_data[starter]['Owns'][random_starter_card_index]
+                random_challenger_card_index = random.randrange(len(json_data[my_id]['Owns'])) 
+                random_challenger_card = json_data[my_id]['Owns'][random_challenger_card_index]
+                result = ""
+                with open(image_tracker_file,"r") as f:
+                    cards = json.load(f)
+                    await message.channel.send("The starter throws out %s" % cards[random_starter_card])
+                    await message.channel.send("The challenger throws out %s" % cards[random_starter_card])
+                    result = resolveCombat(random_challenger_card,random_starter_card,cards)
+                if result == "tie":
+                    await message.channel.send("Both players drew the same kind of frame.")
+                elif result == "starter":
+                    await message.channel.send("The starter wins")
+                    json_data[starter]['Owns'].append(random_challenger_card)
+                    json_data[my_id]['Owns'].remove(random_challenger_card)
+                else:
+                    await message.channel.send("The challenger wins")
+                    json_data[my_id]['Owns'].append(random_starter_card)
+                    json_data[starter_id]['Owns'].remove(random_starter_card)
+                json_data['isduel'] = "false"
+                json_data['starter'] = ""
+            else:
+                json_data['isduel'] = "true"
+                json_data['starter'] = my_id
+        else:
+            await message.channel.send("You do not have enough frames for this. Buy some first.")
 
     # Handle quotes
     if message.content == "!quote":
-        json_data[my_id]['Points'] = json_data[my_id]['Points'] + 100
-        response = getQuote()
-        await message.channel.send(response)
+        if json_data[my_id]['DougCoin'] >= 10:
+            json_data[my_id]['Points'] = json_data[my_id]['Points'] + 100
+            json_data[my_id]['DougCoin'] = json_data[my_id]['DougCoin'] - 10
+            response = getQuote()
+            await message.channel.send(response)
+        else:
+            await message.channel.send("You do not have enough DougCoin for this. Use !mine to get more")
 
     # Create motivational
     if message.content == "!motivate":
-        image_file = createMotivational()
-        json_data[my_id]['Points'] = json_data[my_id]['Points'] + 1000
-        await message.channel.send(file=image_file)
+        if json_data[my_id]['DougCoin'] >= 20:
+            #if len(json_data[my_id]['Owns']) == 0:
+            #    await message.channel.send("You may only create motivationals of images you own.")
+            #else:
+            image_file = createMotivational(my_id)
+            json_data[my_id]['Points'] = json_data[my_id]['Points'] + 1000
+            json_data[my_id]['DougCoin'] = json_data[my_id]['DougCoin'] - 20
+            await message.channel.send(file=image_file)
+        else:
+            await message.channel.send("You do not have enough DougCoin for this. Use !mine to get more.")
 
     # Handle frames
     if message.content == "!frame":
-        image_file,times_seen,unsent_images = getImage()
-        msg = ""
-        if times_seen == 1 and unsent_images == 0:
-            json_data[my_id]['Points'] = json_data[my_id]['Points'] + 10000000
-            msg = "This is a new frame! Wow! There are no new frames remaining. You are insane!"
-        elif times_seen == 1:
-            json_data[my_id]['Points'] = json_data[my_id]['Points'] + 1000
-            msg = "This is a brand spankin' new frame! There are %d new frames remaining!" % unsent_images
+        if json_data[my_id]['DougCoin'] >= 15:
+            image_file,unsent_images,frame_name = getImage()
+            msg = ""
+            if unsent_images == 0:
+                json_data[my_id]['Points'] = json_data[my_id]['Points'] + 10000000
+                msg = "This is a new frame! Wow! There are no new frames remaining. You are insane!"
+            else:
+                json_data[my_id]['Points'] = json_data[my_id]['Points'] + 1000
+                msg = "There are %d new frames remaining." % (unsent_images)
+            json_data[my_id]['DougCoin'] = json_data[my_id]['DougCoin'] - 15
+            json_data[my_id]['Owns'].append(frame_name)
+            await message.channel.send(msg,file=image_file)
         else:
-            json_data[my_id]['Points'] = json_data[my_id]['Points'] + 100
-            msg = "This frame has been seen %d times. There are %d new frames remaining." % (times_seen,unsent_images)
-        await message.channel.send(msg,file=image_file)
+            await message.channel.send("You do not have enough DougCoin for this. Use !mine to get more.")
+
+    # Handle mining
+    if message.content == "!mine":
+        random_number = random.randrange(1,10) * 10
+        json_data[my_id]['DougCoin'] = json_data[my_id]['DougCoin'] + random_number
+        await message.channel.send("You just mined %d DougCoin!" % random_number)
 
     # help message
     if message.content == "!help":
-        response = "Hello I'm the Nostalgia Bot. I quote it so you don't have to. Simply use !quote and I will repeat a line from Nostalgia Critic: The Wall...or is it Nostalgia Critic's The Wall? I never know where to put the 's' there. If you type !frame I will send a random still from the movie! !level will display a user's current cult status. !motivate will create a motivational image to get you through the day"
+        response = "Hello I'm the Nostalgia Bot. I quote it so you don't have to. Simply use !quote and I will repeat a line from Nostalgia Critic: The Wall...or is it Nostalgia Critic's The Wall? I never know where to put the 's' there. If you type !frame I will send a random still from the movie! !stats will display a user's current cult status. !motivate will create a motivational image to get you through the day. !mine will grant you more DougCoin. !duel will challenge another player for one of your frames."
         await message.channel.send(response)
 
     points = json_data[my_id]['Points']
