@@ -1,5 +1,5 @@
 #!/opt/ncbot/python36/bin/python3
-import random,os,discord,json,time
+import random,os,discord,json,time,datetime
 from dotenv import load_dotenv
 from PIL import Image, ImageFont, ImageDraw
 
@@ -49,7 +49,7 @@ def getImage():
             json_data = json.load(g)
             good_to_go = True
             for user in json_data.keys():
-                if type(json_data[user]) == dict and f in json_data[user]['Owns']:
+                if type(json_data[user]) == dict and user != 'auctions' and f in json_data[user]['Owns']:
                     good_to_go = False
 
     with open(image_tracker_file) as g:
@@ -145,7 +145,7 @@ async def on_message(message):
 
     # DougDex
     if message.content == "!dougdex":
-        await message.channel.send("You have owned %d out of 1336 frames." % len(json_data[my_id]['DougDex']))
+        await message.channel.send("You have owned %d out of 3027 frames." % len(json_data[my_id]['DougDex']))
 
     # Dueling
     if message.content.split(' ')[0] == "!duel":
@@ -260,12 +260,122 @@ async def on_message(message):
         else:
             await message.channel.send("You do not own that frame.")
 
+    # funny
     if message.content == "!drewbie":
-        await message.channel.send("increased odds in your next duel. Maybe.")
+        await message.channel.send("Increased odds in your next duel. Maybe.")
+
+    # lottery
+    if message.content == "!lottery":
+        if json_data[my_id]['DougCoin'] >= 15:
+            image_file,unsent_images,frame_name,frame_type = getImage()
+            json_data[my_id]['DougCoin'] = json_data[my_id]['DougCoin'] - 15 
+            await message.channel.send("The image up for lottery is...")
+            time.sleep(2)
+            await message.channel.send("This is %s. It is a %s type frame." % (frame_name.split('/')[-1].split('.png')[0],frame_type), file=image_file)
+            candidates = []
+            for player in json_data.keys():
+                if type(json_data[player]) == dict:
+                    candidates.append(player)
+            random_index = random.randrange(0,len(candidates))
+            random_candidate = candidates[random_index]
+            json_data[random_candidate]['Owns'].append(frame_name)
+            await message.channel.send("The winner is...")
+            time.sleep(2)
+            await message.channel.send("%s!" % json_data[random_candidate]['name'])
+        else:
+            await message.channel.send("You need %d DougCoin for this. Use !mine to get more." % 15)
+
+    # auctions
+    if message.content == "!auction":
+        await message.channel.send("The auction command has two features.\n!auction list will display all ongoing auctions and resolve those that have ended. \n!auction <frame> <start> <duration in minutes> will place a frame you own up for auction starting at your price. The auction will close after your duration (in minutes) up to a week.\nUseful references - 60 = 1 hour, 1440 = 1 day, 10080 = 1 week")
+    elif message.content.split(' ')[0] == "!auction":
+        action = message.content.split(' ')[1]
+        # list/resolve auctions
+        if action == "list":
+            if len(json_data['auctions'].keys()) > 0:
+                resolved_auctions = []
+                for auction in json_data['auctions'].keys():
+                    end_time = datetime.datetime.strptime(json_data['auctions'][auction]['end_time'],'%Y-%m-%d %H:%M:%S.%f')
+                    # resolve auctions that are over
+                    if datetime.datetime.now() > end_time:
+                        if 'highest_bidder' in json_data['auctions'][auction].keys():
+                            await message.channel.send("Congratulations to %s who has won %s for %d. " % (json_data[json_data['auctions'][auction]['highest_bidder']]['name'],auction.split('/')[-1].split('.png')[0],json_data['auctions'][auction]['current_bid']), file=discord.File(auction))
+                            resolved_auctions.append(auction)
+                            json_data[json_data['auctions'][auction]['highest_bidder']]['Owns'].append(auction)
+                        else:
+                            await message.channel.send("No bids were placed on %s. Returning it to %s." % (auction.split('/')[-1].split('.png')[0],json_data[json_data['auctions'][auction]['owner']]['name']),file=discord.File(auction))
+                            resolved_auctions.append(auction)
+                            if auction not in json_data[json_data['auctions'][auction]['owner']]['Owns']:
+                                json_data[json_data['auctions'][auction]['owner']]['Owns'].append(auction)
+
+                    else:
+                        if 'highest_bidder' in json_data['auctions'][auction].keys():
+                            await message.channel.send("The current highest bidder for %s is %s with %d. Time remaining: %s" % (auction.split('/')[-1].split('.png')[0], json_data[json_data['auctions'][auction]['highest_bidder']]['name'], json_data['auctions'][auction]['current_bid'], str(end_time - datetime.datetime.now())), file=discord.File(auction))
+                        else:
+                            await message.channel.send("There are currently no bidders on: %s. Bidding starts at %d. Time remaining: %s" % (auction.split('/')[-1].split('.png')[0],json_data['auctions'][auction]['current_bid'], str(end_time - datetime.datetime.now())), file=discord.File(auction))
+                    time.sleep(3)
+                for a in resolved_auctions:
+                    del json_data['auctions'][a]
+            else:
+                await message.channel.send("There are no ongoing auctions.")
+
+        # creating a new auction
+        elif action not in json_data['auctions'].keys():
+            full_path = "/opt/ncbot/Images/"+action+'.png'
+            frame_data = {}
+            if full_path in json_data[my_id]['Owns']:
+                # create new auction
+                auctioner = my_id
+                start_bid = int(message.content.split(' ')[2])
+                duration = int(message.content.split(' ')[3])
+                if duration > 10080:
+                    await message.channel.send("The maximum duration for an auction is 7 days (10080 minutes)")
+                else:
+                    with open(image_tracker_file) as g:
+                        frame_data = json.load(g)
+                        start_time = datetime.datetime.now()
+                        end_time = start_time+datetime.timedelta(minutes = int(duration))
+                        json_data['auctions'][full_path] = {'current_bid': start_bid,'start_time':str(start_time),'end_time':str(end_time),'owner':auctioner}
+                        json_data[my_id]['Owns'].remove(full_path)
+                        await message.channel.send("%s has placed %s up for auction starting at %d DougCoin. It is a %s type frame. To bet on it, use !bid %s <bid>. Use !auction list to resolve all auctions on the market." % (json_data[my_id]['name'], action, start_bid, frame_data[full_path],action), file=discord.File(full_path))
+            else:
+                await message.channel.send("You do not own that frame")
+
+    # bidding
+    if message.content == "!bid":
+        await message.channel.send("Use !bid <frame> <amount> to bid on an ongoing auction. Use !auction list to display ongoing auctions.")
+    elif message.content.split(' ')[0] == '!bid':
+        f_name = message.content.split(' ')[1]
+        full_path = "/opt/ncbot/Images/"+f_name+'.png'
+        amount = int(message.content.split(' ')[2])
+        if full_path in json_data['auctions'].keys():
+            if json_data[my_id]['DougCoin'] < amount:
+                await message.channel.send("You do not have that much DougCoin.")
+            else:
+                end_time = datetime.datetime.strptime(json_data['auctions'][full_path]['end_time'],'%Y-%m-%d %H:%M:%S.%f')
+                ctime = datetime.datetime.now()
+                if ctime < end_time:
+                    if amount > json_data['auctions'][full_path]['current_bid']:
+                        # Return money to outbid
+                        if 'highest_bidder' in json_data['auctions'][full_path].keys():
+                            json_data[json_data['auctions'][full_path]['highest_bidder']]['DougCoin'] = json_data[json_data['auctions'][full_path]['highest_bidder']]['DougCoin'] + json_data['auctions'][full_path]['current_bid']
+                        json_data['auctions'][full_path]['current_bid'] = amount
+                        json_data['auctions'][full_path]['highest_bidder'] = my_id
+                        json_data[my_id]['DougCoin'] = json_data[my_id]['DougCoin'] - amount
+                        await message.channel.send("Successful bid on %s" % f_name)
+                    else:
+                        await message.channel.send("You must bid over %d for this frame." % json_data['auctions'][full_path]['current_bid'])
+                else:
+                    await message.channel.send("Bidding has closed.")
+
+        else:
+            await message.channel.send('That frame is not up for auction')
+        
+
 
     # help message
     if message.content == "!help":
-        response = "Hello I'm the Nostalgia Bot. I quote it so you don't have to. Simply use !quote and I will repeat a line from Nostalgia Critic: The Wall...or is it Nostalgia Critic's The Wall? I never know where to put the 's' there. If you type !frame you will buy a random still from the movie with DougCoin!\n !stats will display a user's current cult status.\n !motivate will create a motivational image to get you through the day.\n !mine will grant you more DougCoin.\n !duel will challenge another player for one of your frames.\n !inventory will display the makeup of your frames. \n !dougdex will display how many unique frames you have ever owned.\n !remindme will send you a DM of what frames you own.\n !dougsplay <x> will send an image of your frame, if you own it."
+        response = "Hello I'm the Nostalgia Bot. I quote it so you don't have to. Simply use !quote and I will repeat a line from Nostalgia Critic: The Wall...or is it Nostalgia Critic's The Wall? I never know where to put the 's' there. If you type !frame you will buy a random still from the movie with DougCoin!\n !stats will display a user's current cult status.\n !motivate will create a motivational image to get you through the day.\n !mine will grant you more DougCoin.\n !duel will challenge another player for one of your frames.\n !inventory will display the makeup of your frames. \n !dougdex will display how many unique frames you have ever owned.\n !remindme will send you a DM of what frames you own.\n !dougsplay <x> will send an image of your frame, if you own it.\n !lottery will award a random player a random frame."
         await message.channel.send(response)
 
     points = json_data[my_id]['Points']
