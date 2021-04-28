@@ -125,7 +125,7 @@ async def on_message(message):
     if my_id not in json_data.keys():
         json_data[my_id] = {'Points': 0,'DougCoin': 100,'Owns':[],'Wins':0,'Level': ranks[0]}
     if message.content == "!stats":
-        msg = "You currently have: %d xp and %d DougCoin. You are a %s" % (json_data[my_id]['Points'],json_data[my_id]['DougCoin'],json_data[my_id]['Level'])
+        msg = "You currently have: %d xp and %d DougCoin. You are a %s. You own %d frames." % (json_data[my_id]['Points'],json_data[my_id]['DougCoin'],json_data[my_id]['Level'],len(json_data[my_id]['Owns']))
         await message.channel.send(msg)
     for word in message.content.split(' '):
         if word in keywords:
