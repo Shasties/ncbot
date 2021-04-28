@@ -302,6 +302,7 @@ async def on_message(message):
                             await message.channel.send("Congratulations to %s who has won %s for %d. " % (json_data[json_data['auctions'][auction]['highest_bidder']]['name'],auction.split('/')[-1].split('.png')[0],json_data['auctions'][auction]['current_bid']), file=discord.File(auction))
                             resolved_auctions.append(auction)
                             json_data[json_data['auctions'][auction]['highest_bidder']]['Owns'].append(auction)
+                            json_data[json_data['auctions'][auction]['owner']]['DougCoin'] = json_data[json_data['auctions'][auction]['owner']]['DougCoin'] + json_data['auctions'][auction]['current_bid']
                         else:
                             await message.channel.send("No bids were placed on %s. Returning it to %s." % (auction.split('/')[-1].split('.png')[0],json_data[json_data['auctions'][auction]['owner']]['name']),file=discord.File(auction))
                             resolved_auctions.append(auction)
