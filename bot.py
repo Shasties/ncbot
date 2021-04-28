@@ -327,18 +327,31 @@ async def on_message(message):
             if full_path in json_data[my_id]['Owns']:
                 # create new auction
                 auctioner = my_id
+                made_auctions = 0 
                 start_bid = int(message.content.split(' ')[2])
                 duration = int(message.content.split(' ')[3])
                 if duration > 10080:
                     await message.channel.send("The maximum duration for an auction is 7 days (10080 minutes)")
                 else:
-                    with open(image_tracker_file) as g:
-                        frame_data = json.load(g)
-                        start_time = datetime.datetime.now()
-                        end_time = start_time+datetime.timedelta(minutes = int(duration))
-                        json_data['auctions'][full_path] = {'current_bid': start_bid,'start_time':str(start_time),'end_time':str(end_time),'owner':auctioner}
-                        json_data[my_id]['Owns'].remove(full_path)
-                        await message.channel.send("%s has placed %s up for auction starting at %d DougCoin. It is a %s type frame. To bet on it, use !bid %s <bid>. Use !auction list to resolve all auctions on the market." % (json_data[my_id]['name'], action, start_bid, frame_data[full_path],action), file=discord.File(full_path))
+                    for a in json_data['auctions'].keys():
+                        if json_data['auctions'][a]['owner'] == my_id:
+                            made_auctions = made_auctions + 1
+                    auction_limit = 5
+                    for i in range(len(ranks)):
+                        if json_data[my_id]['Level'] == ranks[i]:
+                            auction_limit = 3+3*i
+                    if json_data[my_id]['Level'] == ranks[-1]:
+                        auction_limit = 10000
+                    if made_auctions >= auction_limit:
+                        await message.channel.send("You may only have %d auctions ongoing at a time. Increase your level to increase this limit." % auction_limit)
+                    else:
+                        with open(image_tracker_file) as g:
+                            frame_data = json.load(g)
+                            start_time = datetime.datetime.now()
+                            end_time = start_time+datetime.timedelta(minutes = int(duration))
+                            json_data['auctions'][full_path] = {'current_bid': start_bid,'start_time':str(start_time),'end_time':str(end_time),'owner':auctioner}
+                            json_data[my_id]['Owns'].remove(full_path)
+                            await message.channel.send("%s has placed %s up for auction starting at %d DougCoin. It is a %s type frame. To bet on it, use !bid %s <bid>. Use !auction list to resolve all auctions on the market." % (json_data[my_id]['name'], action, start_bid, frame_data[full_path],action), file=discord.File(full_path))
             else:
                 await message.channel.send("You do not own that frame")
 
