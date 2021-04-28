@@ -129,6 +129,8 @@ async def on_message(message):
         json_data[my_id]['Losses'] = 0
     if 'Ties' not in json_data[my_id].keys():
         json_data[my_id]['Ties'] = 0
+    if 'DougDex' not in json_data[my_id].keys():
+        json_data[my_id]['DougDex'] = []
     if message.content == "!stats":
         msg = "You currently have: %d xp and %d DougCoin. You are a %s. You own %d frames and have %d wins. Your W/L/T ratio is %d/%d/%d" % (json_data[my_id]['Points'],json_data[my_id]['DougCoin'],json_data[my_id]['Level'],len(json_data[my_id]['Owns']),json_data[my_id]['Wins'],json_data[my_id]['Wins'],json_data[my_id]['Losses'],json_data[my_id]['Ties'])
         await message.channel.send(msg)
@@ -136,6 +138,14 @@ async def on_message(message):
         if word in keywords:
             json_data[my_id]['Points'] = json_data[my_id]['Points'] + 10
             json_data[my_id]['DougCoin'] = json_data[my_id]['DougCoin'] + 10
+
+    for doug in json_data[my_id]['Owns']:
+        if doug not in json_data[my_id]['DougDex']:
+            json_data[my_id]['DougDex'].append(doug)
+
+    # DougDex
+    if message.content == "!dougdex":
+        await message.channel.send("You have owned %d out of 1336 frames." % len(json_data[my_id]['DougDex']))
 
     # Dueling
     if message.content.split(' ')[0] == "!duel":
@@ -149,22 +159,23 @@ async def on_message(message):
                 result = ""
                 with open(image_tracker_file,"r") as f:
                     cards = json.load(f)
-                    await message.channel.send("%s throws out %s" % (json_data[starter]['name'],cards[random_starter_card]))
+                    await message.channel.send("%s throws out %s ..." % (json_data[starter]['name'],cards[random_starter_card]))
                     time.sleep(2)
                     await message.channel.send("%s throws out %s" % (json_data[my_id]['name'],cards[random_challenger_card]))
+                    time.sleep(0.5)
                     result = resolveCombat(random_challenger_card,random_starter_card,cards)
                 if result == "tie":
                     await message.channel.send("Both players drew the same kind of frame.")
                     json_data[starter]['Ties'] = json_data[starter]['Ties']+1
                     json_data[my_id]['Ties'] = json_data[my_id]['Ties']+1
                 elif result == "starter":
-                    await message.channel.send("%s wins this frame: " % json_data[starter]['name'], file = discord.File(random_challenger_card))
+                    await message.channel.send("%s wins %s: " % (json_data[starter]['name'],random_challenger_card.split('/')[-1].split('.png')[0]), file = discord.File(random_challenger_card))
                     json_data[starter]['Owns'].append(random_challenger_card)
                     json_data[starter]['Wins'] = json_data[starter]['Wins']+1
                     json_data[my_id]['Losses'] = json_data[my_id]['Losses']+1
                     json_data[my_id]['Owns'].remove(random_challenger_card)
                 else:
-                    await message.channel.send("%s wins this frame:" % json_data[my_id]['name'],file = discord.File(random_starter_card))
+                    await message.channel.send("%s wins %s:" % (json_data[my_id]['name'],random_starter_card.split('/')[-1].split('.png')[0]),file = discord.File(random_starter_card))
                     json_data[my_id]['Owns'].append(random_starter_card)
                     json_data[my_id]['Wins'] = json_data[my_id]['Wins']+1
                     json_data[starter]['Losses'] = json_data[starter]['Losses']+1
@@ -217,20 +228,20 @@ async def on_message(message):
 
     # Handle frames
     if message.content == "!frame":
-        if json_data[my_id]['DougCoin'] >= 15:
+        if json_data[my_id]['DougCoin'] >= 15 + 5*(len(json_data[my_id]['Owns'])):
             image_file,unsent_images,frame_name,frame_type = getImage()
             msg = ""
             if unsent_images == 0:
                 json_data[my_id]['Points'] = json_data[my_id]['Points'] + 10000000
-                msg = "This is a %s frame. Wow! There are no new frames remaining. You are insane!" % frame_type
+                msg = "This is a %s frame. This is %s. Wow! There are no new frames remaining. You are insane!" % frame_type,frame_name.split('/')[-1].split('.png')[0]
             else:
                 json_data[my_id]['Points'] = json_data[my_id]['Points'] + 1000
-                msg = "This is a %s frame. There are %d new frames remaining." % (frame_type,unsent_images)
-            json_data[my_id]['DougCoin'] = json_data[my_id]['DougCoin'] - 15
+                msg = "This is a %s frame. This is %s. There are %d new frames remaining." % (frame_type,frame_name.split('/')[-1].split('.png')[0],unsent_images)
+            json_data[my_id]['DougCoin'] = json_data[my_id]['DougCoin'] - (15 + 5*(len(json_data[my_id]['Owns']))) 
             json_data[my_id]['Owns'].append(frame_name)
             await message.channel.send(msg,file=image_file)
         else:
-            await message.channel.send("You do not have enough DougCoin for this. Use !mine to get more.")
+            await message.channel.send("You need %d DougCoin for this. Use !mine to get more." % (15 + 5*(len(json_data[my_id]['Owns']))))
 
     # Handle mining
     if message.content == "!mine":
@@ -238,12 +249,23 @@ async def on_message(message):
         json_data[my_id]['DougCoin'] = json_data[my_id]['DougCoin'] + random_number
         await message.channel.send("You just mined %d DougCoin!" % random_number)
 
+    if message.content == "!remindme":
+        frames_to_send = [x.split("/")[-1].split('.png')[0] for x in json_data[my_id]['Owns']]
+        await message.author.send("You currently own the following frames: "+str(frames_to_send))
+
+    if message.content.split(' ')[0] == "!dougsplay":
+        full_path = "/opt/ncbot/Images/"+message.content.split(' ')[1]+'.png'
+        if full_path in json_data[my_id]['Owns']:
+            await message.channel.send(file=discord.File(full_path))
+        else:
+            await message.channel.send("You do not own that frame.")
+
     if message.content == "!drewbie":
         await message.channel.send("increased odds in your next duel. Maybe.")
 
     # help message
     if message.content == "!help":
-        response = "Hello I'm the Nostalgia Bot. I quote it so you don't have to. Simply use !quote and I will repeat a line from Nostalgia Critic: The Wall...or is it Nostalgia Critic's The Wall? I never know where to put the 's' there. If you type !frame I will send a random still from the movie! !stats will display a user's current cult status. !motivate will create a motivational image to get you through the day. !mine will grant you more DougCoin. !duel will challenge another player for one of your frames. !inventory will display the makeup of your frames."
+        response = "Hello I'm the Nostalgia Bot. I quote it so you don't have to. Simply use !quote and I will repeat a line from Nostalgia Critic: The Wall...or is it Nostalgia Critic's The Wall? I never know where to put the 's' there. If you type !frame you will buy a random still from the movie with DougCoin!\n !stats will display a user's current cult status.\n !motivate will create a motivational image to get you through the day.\n !mine will grant you more DougCoin.\n !duel will challenge another player for one of your frames.\n !inventory will display the makeup of your frames. \n !dougdex will display how many unique frames you have ever owned.\n !remindme will send you a DM of what frames you own.\n !dougsplay <x> will send an image of your frame, if you own it."
         await message.channel.send(response)
 
     points = json_data[my_id]['Points']
