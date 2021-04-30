@@ -256,7 +256,15 @@ async def on_message(message):
         await message.channel.send("You just mined %d DougCoin!" % random_number)
 
     if message.content == "!remindme":
-        frames_to_send = [x.split("/")[-1].split('.png')[0] for x in json_data[my_id]['Owns']]
+        frames_to_send = []
+
+        for x in json_data[my_id]['Owns']:
+            msg = x.split("/")[-1].split('.png')[0] 
+            with open(image_tracker_file,"r") as f:
+                cards = json.load(f)
+                msg = msg + " type - "+cards[x]
+            frames_to_send.append(msg)
+
         await message.author.send("You currently own the following frames: "+str(frames_to_send))
 
     if message.content.split(' ')[0] == "!dougsplay":
@@ -270,6 +278,20 @@ async def on_message(message):
     if message.content == "!drewbie":
         await message.channel.send("Increased odds in your next duel. Maybe.")
 
+    # make another player lose a frame
+    if message.content.split(' ')[0] == "!snipe":
+        if json_data[my_id]['DougCoin'] >= 10000:
+            target = message.content.split(' ')[1]
+            for player in json_data.keys():
+                if 'name' in json_data[player].keys() and json_data[player]['name'] == target:
+                    random_index = random.randrange(0,len(json_data[player]['Owns']))
+                    random_frame = json_data[player]['Owns'][random_index]
+                    message.channel.send("You have sniped %s from %s. It has been returned to the pool." % (random_frame.split('/')[-1].split('.png')[0],target))
+                    json_data[player]['Owns'].remove(random_frame)
+        else:
+            await message.channel.send("You need %d Dougcoin for this." % 10000)
+
+
     # lottery
     if message.content == "!lottery":
         if json_data[my_id]['DougCoin'] >= 15:
@@ -280,7 +302,7 @@ async def on_message(message):
             await message.channel.send("This is %s. It is a %s type frame." % (frame_name.split('/')[-1].split('.png')[0],frame_type), file=image_file)
             candidates = []
             for player in json_data.keys():
-                if type(json_data[player]) == dict:
+                if type(json_data[player]) == dict and player != 'auctions':
                     candidates.append(player)
             random_index = random.randrange(0,len(candidates))
             random_candidate = candidates[random_index]
@@ -301,6 +323,10 @@ async def on_message(message):
             if len(json_data['auctions'].keys()) > 0:
                 resolved_auctions = []
                 for auction in json_data['auctions'].keys():
+                    card_type = ""
+                    with open(image_tracker_file,"r") as f:
+                        cards = json.load(f)
+                        card_type = cards[auction]
                     end_time = datetime.datetime.strptime(json_data['auctions'][auction]['end_time'],'%Y-%m-%d %H:%M:%S.%f')
                     # resolve auctions that are over
                     if datetime.datetime.now() > end_time:
@@ -317,9 +343,9 @@ async def on_message(message):
 
                     else:
                         if 'highest_bidder' in json_data['auctions'][auction].keys():
-                            await message.channel.send("The current highest bidder for %s is %s with %d. Time remaining: %s" % (auction.split('/')[-1].split('.png')[0], json_data[json_data['auctions'][auction]['highest_bidder']]['name'], json_data['auctions'][auction]['current_bid'], str(end_time - datetime.datetime.now())), file=discord.File(auction))
+                            await message.channel.send("The current highest bidder for %s is %s with %d. It is a %s type frame. Time remaining: %s" % (auction.split('/')[-1].split('.png')[0], json_data[json_data['auctions'][auction]['highest_bidder']]['name'], json_data['auctions'][auction]['current_bid'], card_type,str(end_time - datetime.datetime.now()).split('.')[0]), file=discord.File(auction))
                         else:
-                            await message.channel.send("There are currently no bidders on: %s. Bidding starts at %d. Time remaining: %s" % (auction.split('/')[-1].split('.png')[0],json_data['auctions'][auction]['current_bid'], str(end_time - datetime.datetime.now())), file=discord.File(auction))
+                            await message.channel.send("There are currently no bidders on: %s. It is a %s type frame. Bidding starts at %d. Time remaining: %s" % (auction.split('/')[-1].split('.png')[0],card_type,json_data['auctions'][auction]['current_bid'],str(end_time - datetime.datetime.now()).split('.')[0]), file=discord.File(auction))
                     time.sleep(3)
                 for a in resolved_auctions:
                     del json_data['auctions'][a]
@@ -353,7 +379,7 @@ async def on_message(message):
                     else:
                         with open(image_tracker_file) as g:
                             frame_data = json.load(g)
-                            start_time = datetime.datetime.now()
+                            start_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
                             end_time = start_time+datetime.timedelta(minutes = int(duration))
                             json_data['auctions'][full_path] = {'current_bid': start_bid,'start_time':str(start_time),'end_time':str(end_time),'owner':auctioner}
                             json_data[my_id]['Owns'].remove(full_path)
@@ -373,7 +399,7 @@ async def on_message(message):
                 await message.channel.send("You do not have that much DougCoin.")
             else:
                 end_time = datetime.datetime.strptime(json_data['auctions'][full_path]['end_time'],'%Y-%m-%d %H:%M:%S.%f')
-                ctime = datetime.datetime.now()
+                ctime = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
                 if ctime < end_time:
                     if amount > json_data['auctions'][full_path]['current_bid']:
                         # Return money to outbid
@@ -395,7 +421,7 @@ async def on_message(message):
 
     # help message
     if message.content == "!help":
-        response = "Hello I'm the Nostalgia Bot. I quote it so you don't have to. Simply use !quote and I will repeat a line from Nostalgia Critic: The Wall...or is it Nostalgia Critic's The Wall? I never know where to put the 's' there. If you type !frame you will buy a random still from the movie with DougCoin!\n !stats will display a user's current cult status.\n !motivate will create a motivational image to get you through the day.\n !mine will grant you more DougCoin.\n !duel will challenge another player for one of your frames.\n !inventory will display the makeup of your frames. \n !dougdex will display how many unique frames you have ever owned.\n !remindme will send you a DM of what frames you own.\n !dougsplay <x> will send an image of your frame, if you own it.\n !lottery will award a random player a random frame."
+        response = "Hello I'm the Nostalgia Bot. I quote it so you don't have to. Simply use !quote and I will repeat a line from Nostalgia Critic: The Wall...or is it Nostalgia Critic's The Wall? I never know where to put the 's' there. If you type !frame you will buy a random still from the movie with DougCoin!\n !stats will display a user's current cult status.\n !motivate will create a motivational image to get you through the day.\n !mine will grant you more DougCoin.\n !duel will challenge another player for one of your frames.\n !inventory will display the makeup of your frames. \n !dougdex will display how many unique frames you have ever owned.\n !remindme will send you a DM of what frames you own.\n !dougsplay <x> will send an image of your frame, if you own it.\n !lottery will award a random player a random frame.\n !snipe will remove a random frame from an opponent's inventory"
         await message.channel.send(response)
 
     points = json_data[my_id]['Points']
