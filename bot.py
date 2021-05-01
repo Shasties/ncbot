@@ -132,7 +132,11 @@ async def on_message(message):
     if 'DougDex' not in json_data[my_id].keys():
         json_data[my_id]['DougDex'] = []
     if message.content == "!stats":
-        msg = "You currently have: %d xp and %d DougCoin. You are a %s. You own %d frames and have %d wins. Your W/L/T ratio is %d/%d/%d" % (json_data[my_id]['Points'],json_data[my_id]['DougCoin'],json_data[my_id]['Level'],len(json_data[my_id]['Owns']),json_data[my_id]['Wins'],json_data[my_id]['Wins'],json_data[my_id]['Losses'],json_data[my_id]['Ties'])
+        totalgames = json_data[my_id]['Losses'] + json_data[my_id]['Ties'] + json_data[my_id]['Wins']
+        winningpercentage = ((json_data[my_id]['Wins'] + (.5 * json_data[my_id]['Ties']))/totalgames) * 100
+        winningpercentagerounded = round(winningpercentage, 2)
+
+        msg = "You currently have: %d xp and %d DougCoin. You are a %s. You own %d frames and have %d wins. Your W/L/T ratio is %d/%d/%d. Your next frame will cost %d. Your winning percentage is: %.2f%%" % (json_data[my_id]['Points'],json_data[my_id]['DougCoin'],json_data[my_id]['Level'],len(json_data[my_id]['Owns']),json_data[my_id]['Wins'],json_data[my_id]['Wins'],json_data[my_id]['Losses'],json_data[my_id]['Ties'],15 + 5*(len(json_data[my_id]['Owns'])),winningpercentagerounded)
         await message.channel.send(msg)
     for word in message.content.split(' '):
         if word in keywords:
