@@ -164,6 +164,8 @@ async def on_message(message):
                     await message.channel.send("%s throws out %s" % (json_data[my_id]['name'],cards[random_challenger_card]))
                     time.sleep(0.5)
                     result = resolveCombat(random_challenger_card,random_starter_card,cards)
+                    json_data[my_id]['Points'] = json_data[my_id]['Points']+5
+                    json_data[starter]['Points'] = json_data[starter]['Points']+5
                 if result == "tie":
                     await message.channel.send("Both players drew the same kind of frame.")
                     json_data[starter]['Ties'] = json_data[starter]['Ties']+1
@@ -379,7 +381,7 @@ async def on_message(message):
                     else:
                         with open(image_tracker_file) as g:
                             frame_data = json.load(g)
-                            start_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+                            start_time = datetime.datetime.now()
                             end_time = start_time+datetime.timedelta(minutes = int(duration))
                             json_data['auctions'][full_path] = {'current_bid': start_bid,'start_time':str(start_time),'end_time':str(end_time),'owner':auctioner}
                             json_data[my_id]['Owns'].remove(full_path)
@@ -399,7 +401,7 @@ async def on_message(message):
                 await message.channel.send("You do not have that much DougCoin.")
             else:
                 end_time = datetime.datetime.strptime(json_data['auctions'][full_path]['end_time'],'%Y-%m-%d %H:%M:%S.%f')
-                ctime = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+                ctime = datetime.datetime.now()
                 if ctime < end_time:
                     if amount > json_data['auctions'][full_path]['current_bid']:
                         # Return money to outbid
