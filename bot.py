@@ -1,5 +1,5 @@
 #!/opt/ncbot/python36/bin/python3
-import random,os,discord,json,time,datetime
+import random,os,discord,json,time,datetime,subprocess
 from dotenv import load_dotenv
 from PIL import Image, ImageFont, ImageDraw
 
@@ -110,6 +110,57 @@ def resolveCombat(challenger, starter, cards):
                 return "starter"
             else:
                 return "challenger"
+
+@client.event
+async def on_voice_state_update(member, before, after):
+    mychannel = "nctw to study and relax to"
+    original_file = "/opt/ncbot/the_wall.mp4"
+    in_progress_file = "/opt/ncbot/the_wall_progress.mp4"
+    # Bot should join whenever someone enters channel
+    if member.name != "NostalgiaBot" and after.channel != None and after.channel.name == mychannel and "NostalgiaBot" not in [m.name for m in after.channel.members]:
+        vc = await after.channel.connect()
+        setattr(client,'session_time',datetime.datetime.now())
+        if os.path.exists(in_progress_file):
+            play_file = in_progress_file
+        else:
+            play_file = original_file
+        vc.play(discord.FFmpegPCMAudio(play_file))
+
+    # Bot should leave if it is the last one
+    if member.name != "NostalgiaBot" and after.channel == None and before.channel.name == mychannel and len(before.channel.members) == 1:
+        myclient = client.voice_clients[0]
+        if myclient.is_playing():
+            myclient.stop()
+        # Get how long people were in channel for
+        now_time = datetime.datetime.now()
+        play_time = str(now_time - client.session_time).split('.')[0]
+        play_seconds = int(play_time.split(":")[2])
+        play_minutes = int(play_time.split(":")[1])
+        total_play_time = getattr(client,'total_play_time',"00:00:00")
+        tpt_s = int(total_play_time.split(":")[2])
+        tpt_m = int(total_play_time.split(":")[1])
+        new_s = tpt_s + play_seconds
+        new_m = tpt_m + play_minutes
+        if new_s > 60:
+            new_s = new_s - 60
+            new_m = new_m + 1
+        setattr(client,'total_play_time',"00:"+str(new_m)+":"+str(new_s))
+        # Determine if video needs reset
+        if int(client.total_play_time.split(":")[1]) >= 39 and int(client.total_play_time.split(":")[2]) >= 45:
+            await client.get_channel(850975447902322708).send("You have finished listening to NCTW! Rejoin the channel for it to play again.")
+            client.total_play_time = "00:00:00"
+            if os.path.exists(in_progress_file):
+                os.remove(in_progress_file)
+        # Otherwise, trim video to pick up where it left off
+        else:
+            await client.get_channel(850975447902322708).send("Trimming video, please wait.")
+            subprocess.call("ffmpeg -y -i "+original_file+" -ss "+client.total_play_time+" -c copy "+in_progress_file, shell=True)
+            await client.get_channel(850975447902322708).send("Finished trimming.")
+
+        # strptime is actually ducking stupid you useless library
+        #client.total_play_time = datetime.datetime.strptime(client.total_play_time,"%H:%M:%S")
+
+        await myclient.disconnect()
 
 @client.event
 async def on_message(message):
@@ -287,13 +338,14 @@ async def on_message(message):
     # make another player lose a frame
     if message.content.split(' ')[0] == "!snipe":
         if json_data[my_id]['DougCoin'] >= 10000:
-            target = message.content.split(' ')[1]
+            target = ' '.join(message.content.split(' ')[1:])
             for player in json_data.keys():
-                if 'name' in json_data[player].keys() and json_data[player]['name'] == target:
+                if type(json_data[player]) == dict and 'name' in json_data[player].keys() and json_data[player]['name'] == target:
                     random_index = random.randrange(0,len(json_data[player]['Owns']))
                     random_frame = json_data[player]['Owns'][random_index]
-                    message.channel.send("You have sniped %s from %s. It has been returned to the pool." % (random_frame.split('/')[-1].split('.png')[0],target))
+                    await message.channel.send("You have sniped %s from %s. It has been returned to the pool." % (random_frame.split('/')[-1].split('.png')[0],target), file = discord.File(random_frame))
                     json_data[player]['Owns'].remove(random_frame)
+                    json_data[my_id]['DougCoin'] = json_data[my_id]['DougCoin'] - 10000
         else:
             await message.channel.send("You need %d Dougcoin for this." % 10000)
 
